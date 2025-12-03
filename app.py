@@ -34,11 +34,11 @@ with tab1:
     # 1.1. Input Parameters
     colA, colB = st.columns(2)
     with colA:
-        k_walks = st.slider("Select Walk Length (k)", 2, 5, 3)
+        k_walks = st.slider("Select Walk Length (k)", 2, 5, 3, key='k_walks_mvp1')
         st.info(f"Goal: Calculate {k_walks}-walks.")
     with colB:
         # Node 4 breaks the 3-walk in the {1, 2, 3} subgraph
-        J_nodes = st.multiselect("Select Subgraph Nodes J", [1, 2, 3, 4], default=[1, 2, 3])
+        J_nodes = st.multiselect("Select Subgraph Nodes J", [1, 2, 3, 4], default=[1, 2, 3], key='j_nodes_mvp1')
         J_set = set(J_nodes)
         if not J_set: J_set = {1, 2, 3} # Prevent empty set error
 
@@ -170,7 +170,7 @@ with tab3:
     st.markdown("The $k$-th state $L_k$ is found by calculating the Maxel power $\mathbf{M}_q^{k-1}$ using $\mathbf{O(\log k)}$ steps.")
 
     # 3.1. Prediction Input
-    k_prediction = st.slider("Select Prediction Time (t=k)", 10, 500, 100)
+    k_prediction = st.slider("Select Prediction Time (t=k)", 10, 500, 100, key='k_prediction_mvp3')
 
     # In app.py, inside 'with tab3:'
 
