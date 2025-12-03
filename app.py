@@ -103,7 +103,8 @@ with tab1:
                  height=450)
     fig.update_traces(textposition='outside')
     fig.update_layout(showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch') # Replaced use_container_width=True
+
     st.caption("The Maxel optimizer avoids the quadratic cost of copying the subgraph in every step, leading to substantial gains.")
 
 # =======================================================================================
@@ -160,7 +161,7 @@ with tab2:
                           labels={'value': 'Execution Time (s)', 'variable': 'Method'},
                           title="Execution Time Scaling: Algebraic Solve vs. Iterative Search",
                           height=450)
-    st.plotly_chart(fig_profile, use_container_width=True)
+    st.plotly_chart(fig_profile, width='stretch') # Replaced use_container_width=True
 
 # =======================================================================================
 # --- TAB 3: Dynamic Vexel Calculus (MVP 3) ---
@@ -176,7 +177,8 @@ with tab3:
     L_k_predicted = recurrence_prediction_mvp(k_prediction)
 
     st.subheader(f"Maxel Prediction at $t={k_prediction}$")
-    st.metric(f"Predicted Node Load $L_{k}$", L_k_predicted)
+    # FIXED: Replaced 'k' with 'k_prediction' to resolve NameError
+    st.metric(f"Predicted Node Load $L_{k_prediction}$", L_k_predicted)
 
     # 3.2. Warp Speed Proof (Line/Scatter Plot)
     st.subheader("🚀 Visual Proof: Logarithmic Time Jump (Warp Speed)")
@@ -209,7 +211,7 @@ with tab3:
     fig_series.update_traces(mode='lines+markers', line_shape='linear')
     fig_series.update_layout(xaxis_type='linear')
 
-    st.plotly_chart(fig_series, use_container_width=True)
+    st.plotly_chart(fig_series, width='stretch') # Replaced use_container_width=True
     st.caption(r"The Maxel framework calculates the distant state (large marker) algebraically in $O(\log k)$ time, bypassing all intermediate steps.") # Fixed SyntaxWarning
 
     # 3.3. Profiling Insight (O(k) vs O(log k))
@@ -226,5 +228,5 @@ with tab3:
                        title="Computational Time vs. Prediction Depth",
                        height=450)
     fig_time.update_layout(yaxis_range=[0, 10])
-    st.plotly_chart(fig_time, use_container_width=True)
+    st.plotly_chart(fig_time, width='stretch') # Replaced use_container_width=True
     st.markdown(r"The **Maxel $O(\log k)$ time** line (yellow) visually flattens, confirming computation time is not linearly dependent on the forecast horizon.") # Fixed SyntaxWarning
