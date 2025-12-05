@@ -77,15 +77,32 @@ with tab1:
 
     st.subheader("✅ Result Verification: Correctness is Preserved")
 
+    result_u = m_unoptimized.get_value(1, 4)
+    result_o = m_optimized.get_value(1, 4)
+
+    st.subheader("✅ Result Verification: Correctness is Preserved")
+
     # 1.2. Result Verification (Metrics)
     col1, col2, col3 = st.columns(3)
-    col1.metric("Unoptimized Walk Count", m_unoptimized.get_value(1, 4))
-    col2.metric("Optimized Walk Count", m_optimized.get_value(1, 4))
+    # Use the defined result variables for the metrics
+    col1.metric("Unoptimized Walk Count", result_u) 
+    col2.metric("Optimized Walk Count", result_o)
 
-    if m_unoptimized == m_optimized:
-         col3.success(r"IDENTITY VERIFIED: Unoptimized $\equiv$ Optimized") # Fixed SyntaxWarning
+    # Use the defined result variables for the robust comparison
+    if result_u == result_o:
+         col3.success(r"IDENTITY VERIFIED: Unoptimized $\equiv$ Optimized") 
     else:
          col3.error(r"IDENTITY FAILED: Unoptimized $\neq$ Optimized")
+
+#    # 1.2. Result Verification (Metrics)
+#    col1, col2, col3 = st.columns(3)
+#    col1.metric("Unoptimized Walk Count", m_unoptimized.get_value(1, 4))
+#    col2.metric("Optimized Walk Count", m_optimized.get_value(1, 4))
+
+#    if m_unoptimized == m_optimized:
+#         col3.success(r"IDENTITY VERIFIED: Unoptimized $\equiv$ Optimized") # Fixed SyntaxWarning
+#    else:
+#         col3.error(r"IDENTITY FAILED: Unoptimized $\neq$ Optimized")
 
     st.subheader("📊 Efficiency Proof: The Cost of Copying vs. Filtering")
 
