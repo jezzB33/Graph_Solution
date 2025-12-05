@@ -94,3 +94,27 @@ class Maxel:
                 new_data[i] = result_vexel
 
         return Maxel(new_data, result_support)
+
+    def __eq__(self, other: 'Maxel') -> bool:
+        """Simple check for demonstration purposes."""
+#        if not isinstance(other, Maxel): return False
+
+        # Check that non-zero entries are identical
+#        self_entries = {(i, j, v) for i, c in self.data.items() f>
+#        other_entries = {(i, j, v) for i, c in other.data.items()>
+
+#        return self_entries == other_entries
+
+        if not isinstance(other, Maxel): return False
+
+        # Extract all (i, j, value) tuples where value is non-zero
+        self_entries = {(i, j, v)
+                        for i, c in self.data.items()
+                        for j, v in c.items() if v != 0}
+
+        other_entries = {(i, j, v)
+                         for i, c in other.data.items()
+                         for j, v in other.data.get(i, Counter()).>
+
+        # The comparison should succeed if the set of non-zero (co>
+        return self_entries == other_entries

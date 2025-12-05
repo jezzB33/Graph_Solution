@@ -1,3 +1,5 @@
+import networkx as nx
+import matplotlib.pyplot as plt
 import numpy as np
 from collections import Counter
 from typing import Set, Dict, Any, Tuple
@@ -6,69 +8,256 @@ from typing import Set, Dict, Any, Tuple
 
 class Maxel:
     """
-    Generalized Maxel representation for graph adjacency matrices/tensors.
-    Handles sparse, weighted data over any semiring/field.
+    A Maxel object representing a sparse, multiset-based graph.
+    The graph is stored as a dictionary mapping source nodes (i) to their
+    out-neighborhood Vexels (r_i), which are Counters.
     """
-    def __init__(self, data: Dict[int, Counter], support: Set[int] = None):
-        self.data = data
-        if support is None:
-            self.support = set(data.keys()) | {n for counters in data.values() for n in counters.keys()}
-        else:
-            self.support = support
-        self.nodes = sorted(list(self.support))
-        self.node_map = {node: i for i, node in enumerate(self.nodes)}
+    def __init__(self, data: Dict[int, Counter] = None, support: Set[int] = None):
+        # The core storage: {source_id: Counter(target_id: count)}
+        self.data: Dict[int, Counter] = data if data is not None else {}
 
-    def __matmul__(self, other: 'Maxel') -> 'Maxel':
-        """
-        Maxel Multiplication (Generalized Matrix Product over a semiring/field).
-        This simulates the core path-finding or transition operation.
-        """
-        if not isinstance(other, Maxel):
-            raise TypeError("Can only multiply Maxel by another Maxel.")
-        
-        # In this simple case (counting semiring), it's standard matrix multiplication
-        result_data = {}
-        for i_node in self.nodes:
-            row_counter = Counter()
-            for k_node, val_ik in self.data.get(i_node, Counter()).items():
-                if k_node in other.data:
-                    for j_node, val_kj in other.data[k_node].items():
-                        # The operation is: sum (A[i,k] * B[k,j])
-                        # This works for counting (N) and real (R) fields.
-                        row_counter[j_node] += val_ik * val_kj
-            if row_counter:
-                result_data[i_node] = row_counter
-        
-        return Maxel(result_data, self.support | other.support)
+        # The active support set J (important for Restriction/e_J)
+        self.support: Set[int] = support if support is not None else set()
+        if not self.support:
+            self._update_support()
 
-    def restrict(self, J: Set[int]) -> 'Maxel':
-        """
-        Maxel Restriction (Filtering / Applying the e_J Vexel mask).
-        Filters the Maxel to keep only edges (i, j) where i, j are in J.
-        """
-        new_data = {}
-        for i, counter in self.data.items():
-            if i in J:
-                new_counter = Counter({j: val for j, val in counter.items() if j in J})
-                if new_counter:
-                    new_data[i] = new_counter
-        # If we were doing the OPTIMIZED path, we'd just filter the result, not copy.
-        # But for the UNOPTIMIZED path, we create a new Maxel over the restricted support.
-        return Maxel(new_data, J)
+    def _update_support(self):
+        """Recalculates the active support set J based on current edges."""
+        nodes = set(self.data.keys())
+        for vexel in self.data.values():
+            nodes.update(vexel.keys())
+        self.support = nodes
 
     def get_value(self, i: int, j: int) -> int:
         return self.data.get(i, Counter()).get(j, 0)
-        
+
+    # --- MVP Operation 1: Vexel Union (Maxel Addition) ---
+    def __add__(self, other: 'Maxel') -> 'Maxel':
+        """Performs Maxel Addition (Multiset Union of edges)."""
+        new_data = {}
+        # Get all unique node IDs across both Maxels
+        all_nodes = self.support.union(other.support)
+
+        for i in all_nodes:
+            # Vexel addition is equivalent to Counter addition
+            v1 = self.data.get(i, Counter())
+            v2 = other.data.get(i, Counter())
+            if v1 or v2:
+                # Counter addition performs multiset union (summing counts)
+                new_data[i] = v1 + v2
+
+        return Maxel(new_data)
+
+    # --- MVP Operation 2: Maxel Restriction (Induced Subgraph e_J m e_J) ---
+    def restrict(self, J: Set[int]) -> 'Maxel':
+        """
+        Calculates the induced subgraph m' = e_J m e_J.
+        This is a metadata/filtering operation, not a multiplication.
+        """
+        new_data = {}
+        # 1. Restrict Source Nodes (i): Keep only nodes i in J
+        for i in J:
+            if i in self.data:
+                original_vexel = self.data[i]
+                new_vexel = Counter()
+
+                # 2. Restrict Target Nodes (j): Keep only targets j in J
+                for j, count in original_vexel.items():
+                    if j in J:
+                        new_vexel[j] = count
+
+                if new_vexel:
+                    new_data[i] = new_vexel
+
+        return Maxel(new_data, J)
+
+    # --- MVP Operation 3: Maxel Multiplication (Walk Counting) ---
+    def __matmul__(self, other: 'Maxel') -> 'Maxel':
+        """
+        Performs Maxel Multiplication (m1 @ m2), counting walks of length 2.
+        Walks (i -> k -> j) are counted by the multiset definition of the product.
+        """
+        new_data = {}
+        # The result Maxel is defined on the union of support sets
+        result_support = self.support.union(other.support)
+
+        # Iterate over all possible starting nodes (i) in the result
+        for i in self.support:
+            r_i = self.data.get(i, Counter()) # r_i is the Vexel of m1
+            result_vexel = Counter()
+
+            # Iterate over all intermediate nodes (k) reachable from i
+            for k, count_ik in r_i.items():
+                # c_k is the Vexel of m2's out-neighborhood (k -> j)
+                c_k = other.data.get(k, Counter())
+
+                # For every walk i -> k -> j:
+                # Add (count_ik * count_kj) to the total walk count i -> j
+                for j, count_kj in c_k.items():
+                    # count_ik and count_kj are scalars/integers
+                    walk_count = count_ik * count_kj
+                    result_vexel[j] += walk_count
+
+            if result_vexel:
+                new_data[i] = result_vexel
+
+        return Maxel(new_data, result_support)
+
     def __eq__(self, other: 'Maxel') -> bool:
         """Simple check for demonstration purposes."""
-        if not isinstance(other, Maxel): return False
-        
+#        if not isinstance(other, Maxel): return False
+
         # Check that non-zero entries are identical
-        self_entries = {(i, j, v) for i, c in self.data.items() for j, v in c.items()}
-        other_entries = {(i, j, v) for i, c in other.data.items() for j, v in c.items()}
-        
+#        self_entries = {(i, j, v) for i, c in self.data.items() f>
+#        other_entries = {(i, j, v) for i, c in other.data.items()>
+
+#        return self_entries == other_entries
+
+        if not isinstance(other, Maxel): return False
+
+        # Extract all (i, j, value) tuples where value is non-zero
+        self_entries = {(i, j, v)
+                        for i, c in self.data.items()
+                        for j, v in c.items() if v != 0}
+
+        other_entries = {(i, j, v)
+                         for i, c in other.data.items()
+                         for j, v in other.data.get(i, Counter()).items() if v != 0}
+
+        # The comparison should succeed if the set of non-zero (co>
         return self_entries == other_entries
-        
+
+#class Maxel:
+#    """
+#    Generalized Maxel representation for graph adjacency matrices/tensors.
+#    Handles sparse, weighted data over any semiring/field.
+#    """
+#    def __init__(self, data: Dict[int, Counter], support: Set[int] = None):
+#        self.data = data
+#        if support is None:
+#            self.support = set(data.keys()) | {n for counters in data.values() for n in counters.keys()}
+#        else:
+#            self.support = support
+#        self.nodes = sorted(list(self.support))
+#        self.node_map = {node: i for i, node in enumerate(self.nodes)}
+#
+#    def __matmul__(self, other: 'Maxel') -> 'Maxel':
+#        """
+#        Maxel Multiplication (Generalized Matrix Product over a semiring/field).
+#        This simulates the core path-finding or transition operation.
+#        """
+#        if not isinstance(other, Maxel):
+#            raise TypeError("Can only multiply Maxel by another Maxel.")
+#        
+#        # In this simple case (counting semiring), it's standard matrix multiplication
+#        result_data = {}
+#        for i_node in self.nodes:
+#            row_counter = Counter()
+#            for k_node, val_ik in self.data.get(i_node, Counter()).items():
+#                if k_node in other.data:
+#                    for j_node, val_kj in other.data[k_node].items():
+#                        # The operation is: sum (A[i,k] * B[k,j])
+#                        # This works for counting (N) and real (R) fields.
+#                        row_counter[j_node] += val_ik * val_kj
+#            if row_counter:
+#                result_data[i_node] = row_counter
+#        
+#        return Maxel(result_data, self.support | other.support)
+#
+#    def restrict(self, J: Set[int]) -> 'Maxel':
+#        """
+#        Maxel Restriction (Filtering / Applying the e_J Vexel mask).
+#        Filters the Maxel to keep only edges (i, j) where i, j are in J.
+#        """
+#        new_data = {}
+#        for i, counter in self.data.items():
+#            if i in J:
+#                new_counter = Counter({j: val for j, val in counter.items() if j in J})
+#                if new_counter:
+#                    new_data[i] = new_counter
+#        # If we were doing the OPTIMIZED path, we'd just filter the result, not copy.
+#        # But for the UNOPTIMIZED path, we create a new Maxel over the restricted support.
+#        return Maxel(new_data, J)
+#
+#    def get_value(self, i: int, j: int) -> int:
+#        return self.data.get(i, Counter()).get(j, 0)
+#        
+#    def __eq__(self, other: 'Maxel') -> bool:
+#        """Simple check for demonstration purposes."""
+##        if not isinstance(other, Maxel): return False
+#        
+#        # Check that non-zero entries are identical
+##        self_entries = {(i, j, v) for i, c in self.data.items() for j, v in c.items()}
+##        other_entries = {(i, j, v) for i, c in other.data.items() for j, v in c.items()}
+#        
+##        return self_entries == other_entries
+#
+#        if not isinstance(other, Maxel): return False
+#    
+#        # Extract all (i, j, value) tuples where value is non-zero
+#        self_entries = {(i, j, v) 
+#                        for i, c in self.data.items() 
+#                        for j, v in c.items() if v != 0}
+#                    
+#        other_entries = {(i, j, v) 
+#                         for i, c in other.data.items() 
+#                         for j, v in other.data.get(i, Counter()).items() if v != 0}
+#    
+#        # The comparison should succeed if the set of non-zero (coordinate, value) tuples matches.
+#        return self_entries == other_entries
+#        
+
+def draw_maxel_graph(m: Maxel, J: Set[int], title: str = "Graph Topology"):
+    """
+    Converts a Maxel object to a NetworkX graph and draws it, 
+    highlighting the restricted subgraph J.
+    """
+    G = nx.DiGraph()
+    
+    # 1. Build the graph structure from Maxel data
+    for u, counter in m.data.items():
+        for v, weight in counter.items():
+            if weight != 0:
+                G.add_edge(u, v, weight=weight)
+                
+    # 2. Define node colors and positions
+    pos = nx.spring_layout(G, seed=42) 
+    
+    node_color_map = []
+    # Nodes in J (the restricted subgraph) are highlighted.
+    for node in G.nodes():
+        if node in J:
+            node_color_map.append('skyblue') # Highlight color
+        else:
+            node_color_map.append('lightgray') # Background color
+    
+    # 3. Drawing using Matplotlib
+    fig, ax = plt.subplots(figsize=(7, 5))
+    
+    nx.draw_networkx_nodes(G, pos, 
+                           node_color=node_color_map, 
+                           node_size=1000, 
+                           ax=ax)
+                           
+    nx.draw_networkx_edges(G, pos, 
+                           edge_color='gray', 
+                           arrows=True, 
+                           arrowsize=20, 
+                           ax=ax)
+                           
+    # Draw labels
+    nx.draw_networkx_labels(G, pos, font_size=10, ax=ax)
+    
+    # Add edge weights (if applicable)
+    edge_labels = nx.get_edge_attributes(G, 'weight')
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red', ax=ax)
+
+    ax.set_title(title, fontsize=14)
+    ax.axis('off')
+    
+    # Return the Matplotlib figure object for Streamlit to render
+    return fig
+
 # --- MVP Functions ---
 
 def algebraic_optimizer_mvp(m: Maxel, J: Set[int], k: int) -> Tuple[Maxel, Maxel, int, int]:
